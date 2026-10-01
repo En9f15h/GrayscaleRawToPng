@@ -1,0 +1,188 @@
+name: Build OpenCV Java native libraries
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-opencv-java-native.yml"
+      - "scripts/build-opencv-linux.sh"
+      - "scripts/build-opencv-macos.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: opencv-java500-linux-x64
+            runner: ubuntu-24.04
+            expected_uname: x86_64
+            native_path: native/linux/x64
+            src_path: src/native/linux/x64
+            checks_path: native-checks/linux/x64
+          - artifact: opencv-java500-linux-arm64
+            runner: ubuntu-24.04-arm
+            expected_uname: aarch64
+            native_path: native/linux/arm64
+            src_path: src/native/linux/arm64
+            checks_path: native-checks/linux/arm64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify hosted runner architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          echo "uname -m=${actual}"
+          test "${actual}" = "${{ matrix.expected_uname }}"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            git \
+            openjdk-17-jdk \
+            ant \
+            python3 \
+            pkg-config
+
+      - name: Configure Java 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac_path="$(readlink -f "$(command -v javac)")"
+          java_home="$(cd "$(dirname "${javac_path}")/.." && pwd)"
+          echo "JAVA_HOME=${java_home}" >> "${GITHUB_ENV}"
+          "${java_home}/bin/java" -version
+
+      - name: Build OpenCV Java native library
+        shell: bash
+        run: bash scripts/build-opencv-linux.sh
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ matrix.native_path }}" checks
+          cp "${{ matrix.src_path }}/libopencv_java500.so" "${{ matrix.native_path }}/"
+          cp -R "${{ matrix.checks_path }}/." checks/
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.native_path }}/libopencv_java500.so
+            checks/**
+          if-no-files-found: error
+
+  build-macos:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: opencv-java500-macos-x64
+            runner: macos-15-intel
+            expected_uname: x86_64
+            native_path: native/macos/x64
+            src_path: src/native/macos/x64
+            checks_path: native-checks/macos/x64
+          - artifact: opencv-java500-macos-arm64
+            runner: macos-15
+            expected_uname: arm64
+            native_path: native/macos/arm64
+            src_path: src/native/macos/arm64
+            checks_path: native-checks/macos/arm64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify hosted runner architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          echo "uname -m=${actual}"
+          test "${actual}" = "${{ matrix.expected_uname }}"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew update
+          brew install cmake ninja ant
+
+      - name: Configure Java 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          java_home="$(/usr/libexec/java_home -v 17)"
+          echo "JAVA_HOME=${java_home}" >> "${GITHUB_ENV}"
+          "${java_home}/bin/java" -version
+
+      - name: Build OpenCV Java native library
+        shell: bash
+        run: bash scripts/build-opencv-macos.sh
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ matrix.native_path }}" checks
+          cp "${{ matrix.src_path }}/libopencv_java500.dylib" "${{ matrix.native_path }}/"
+          cp -R "${{ matrix.checks_path }}/." checks/
+
+      - name: Upload platform artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.native_path }}/libopencv_java500.dylib
+            checks/**
+          if-no-files-found: error
+
+  merge-natives:
+    name: opencv-java500-natives
+    needs:
+      - build-linux
+      - build-macos
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: opencv-java500-*
+          path: downloaded
+
+      - name: Merge native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native/linux/x64 native/linux/arm64 native/macos/x64 native/macos/arm64
+          cp downloaded/opencv-java500-linux-x64/native/linux/x64/libopencv_java500.so native/linux/x64/
+          cp downloaded/opencv-java500-linux-arm64/native/linux/arm64/libopencv_java500.so native/linux/arm64/
+          cp downloaded/opencv-java500-macos-x64/native/macos/x64/libopencv_java500.dylib native/macos/x64/
+          cp downloaded/opencv-java500-macos-arm64/native/macos/arm64/libopencv_java500.dylib native/macos/arm64/
+          find native -type f -print
+
+      - name: Upload merged artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: opencv-java500-natives
+          path: native/**
+          if-no-files-found: error
