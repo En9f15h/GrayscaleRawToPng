@@ -119,12 +119,26 @@ jobs:
           echo "uname -m=${actual}"
           test "${actual}" = "${{ matrix.expected_uname }}"
 
-      - name: Install build dependencies
+      - name: Prepare build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          brew update
-          brew install cmake ninja ant
+          cmake --version
+          ninja --version
+          git --version
+          python3 --version
+
+          if ! command -v ant >/dev/null 2>&1; then
+            ant_version="1.10.15"
+            ant_root="${RUNNER_TEMP}/apache-ant-${ant_version}"
+            curl -fsSL "https://archive.apache.org/dist/ant/binaries/apache-ant-${ant_version}-bin.tar.gz" -o "${RUNNER_TEMP}/apache-ant.tar.gz"
+            tar -xzf "${RUNNER_TEMP}/apache-ant.tar.gz" -C "${RUNNER_TEMP}"
+            echo "ANT_HOME=${ant_root}" >> "${GITHUB_ENV}"
+            echo "${ant_root}/bin" >> "${GITHUB_PATH}"
+            "${ant_root}/bin/ant" -version
+          else
+            ant -version
+          fi
 
       - name: Configure Java 17
         shell: bash
