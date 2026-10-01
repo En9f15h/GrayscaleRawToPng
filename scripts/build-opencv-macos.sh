@@ -51,7 +51,7 @@ configure_opencv() {
   local java_args=()
   if [[ -d "${JAVA_HOME}/include" ]]; then
     java_args+=(
-      "-DJAVA_AWT_LIBRARY=${JAVA_HOME}/lib/libjawt.dylib"
+      "-DJAVA_AWT_LIBRARY=NotNeeded"
       "-DJAVA_JVM_LIBRARY=${JAVA_HOME}/lib/server/libjvm.dylib"
       "-DJAVA_INCLUDE_PATH=${JAVA_HOME}/include"
       "-DJAVA_INCLUDE_PATH2=${JAVA_HOME}/include/darwin"
@@ -108,6 +108,8 @@ git clone --branch "${OPENCV_VERSION}" --depth 1 https://github.com/opencv/openc
 
 configure_opencv
 require_java_bindings
+
+grep -A30 -E "^--[[:space:]]+Java:" "${WORK_DIR}/cmake-configure.log" || true
 
 cmake --build "${BUILD_DIR}" --target opencv_java --parallel
 
