@@ -87,7 +87,10 @@ require_java_bindings() {
 
 reject_opencv_shared_deps() {
   local lib="$1"
-  if otool -L "${lib}" | tee "${CHECK_DIR}/otool-L.txt" | grep -E "libopencv_.*\.dylib"; then
+  otool -L "${lib}" | tee "${CHECK_DIR}/otool-L.txt"
+  if tail -n +2 "${CHECK_DIR}/otool-L.txt" \
+      | grep -E "libopencv_.*\.dylib" \
+      | grep -v "libopencv_java500\.dylib"; then
     echo "${LIB_NAME} depends on OpenCV shared dylibs; expected a fat Java native library." >&2
     exit 1
   fi
