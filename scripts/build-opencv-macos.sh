@@ -20,13 +20,13 @@ case "${machine}" in
     arch_dir="x64"
     cmake_arch="x86_64"
     expected_file_text="Mach-O 64-bit.*x86_64"
-    apple_silicon_args=()
+    apple_silicon_processor=""
     ;;
   arm64|aarch64)
     arch_dir="arm64"
     cmake_arch="arm64"
     expected_file_text="Mach-O 64-bit.*arm64"
-    apple_silicon_args=(-DCMAKE_APPLE_SILICON_PROCESSOR=arm64)
+    apple_silicon_processor="arm64"
     ;;
   *)
     echo "Unsupported macOS CPU architecture: ${machine}" >&2
@@ -49,6 +49,12 @@ find_java_home() {
 
 configure_opencv() {
   local java_args=()
+  local macos_args=("-DCMAKE_OSX_ARCHITECTURES=${cmake_arch}")
+
+  if [[ -n "${apple_silicon_processor}" ]]; then
+    macos_args+=("-DCMAKE_APPLE_SILICON_PROCESSOR=${apple_silicon_processor}")
+  fi
+
   if [[ -d "${JAVA_HOME}/include" ]]; then
     java_args+=(
       "-DJAVA_AWT_LIBRARY=NotNeeded"
@@ -61,8 +67,7 @@ configure_opencv() {
   cmake -S "${SRC_DIR}" -B "${BUILD_DIR}" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_STANDARD=17 \
-    -DCMAKE_OSX_ARCHITECTURES="${cmake_arch}" \
-    "${apple_silicon_args[@]}" \
+    "${macos_args[@]}" \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_JAVA=ON \
     -DBUILD_opencv_java=ON \
